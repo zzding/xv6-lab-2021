@@ -1,0 +1,201 @@
+warning: in the working copy of 'user/ls.c', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'grade-lab-util', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/grade-lab-util b/grade-lab-util[m
+[1mold mode 100755[m
+[1mnew mode 100644[m
+[1mdiff --git "a/user/\\" "b/user/\\"[m
+[1mdeleted file mode 100644[m
+[1mindex cc1778d..0000000[m
+[1m--- "a/user/\\"[m
+[1m+++ /dev/null[m
+[36m@@ -1,36 +0,0 @@[m
+[31m-#include "kernel/types.h"[m
+[31m-#include "kernel/stat.h"[m
+[31m-#include <user/user.h>[m
+[31m-int main(){[m
+[31m-    int pid = fork();[m
+[31m-    int p[2];[m
+[31m-    pipe(p);[m
+[31m-    int p2[2];[m
+[31m-    pipe(p2);[m
+[31m-    if(pid == 0){[m
+[31m-        close(0);[m
+[31m-        dup(p[0]);[m
+[31m-        close(p[0]);[m
+[31m-        close(p[1]);[m
+[31m-        char buf[512];[m
+[31m-        read(0, buf, (int)sizeof(buf));[m
+[31m-        printf("%d: received pong\n", getpid());[m
+[31m-        [m
+[31m-        close(p2[0]);[m
+[31m-        write(p2[1], "ping\n", 5);[m
+[31m-        close(p2[1]);[m
+[31m-    }else{[m
+[31m-        close(p[0]);[m
+[31m-        write(p[1], "ping\n", 5);[m
+[31m-        close(p[1]);[m
+[31m-[m
+[31m-        close(0);[m
+[31m-        char buf[512];[m
+[31m-        close(p2[0]);[m
+[31m-        close(p2[1]);[m
+[31m-        dup(p2[0]);[m
+[31m-        read(0, buf, (int)sizeof(buf));[m
+[31m-        printf("%d: received pong\n", getpid());[m
+[31m-    }[m
+[31m-    exit(0);[m
+[31m-}[m
+[1mdiff --git a/user/find.c b/user/find.c[m
+[1mindex 1cd898c..67891fb 100644[m
+[1m--- a/user/find.c[m
+[1m+++ b/user/find.c[m
+[36m@@ -3,66 +3,73 @@[m
+ #include "user/user.h"[m
+ #include "kernel/fs.h"[m
+ [m
+[31m-void find_helper(char const *path, char const *target)[m
+[31m-{[m
+[31m-	char buf[512], *p;[m
+[31m-	int fd;[m
+[31m-	struct dirent de;[m
+[31m-	struct stat st;[m
+[31m-	if((fd = open(path, 0)) < 0){[m
+[31m-		fprintf(2, "find: cannot open %s\n", path);[m
+[31m-		exit(1);[m
+[31m-	}[m
+[32m+[m[32mchar* fmtname(char *path){[m
+[32m+[m[32m    static char buf[DIRSIZ+1];[m
+[32m+[m[32m    char *p;[m
+[32m+[m[32m    for(p = path + strlen(path); p >= path && *p != '/'; --p);[m
+[32m+[m[32m    p++;[m
+[32m+[m[32m    if(strlen(p) >= DIRSIZ)[m[41m [m
+[32m+[m[32m    return p;[m
+[32m+[m[32m    memmove(buf, p, strlen(p));[m
+[32m+[m[32m    memset(buf + strlen(p), ' ', DIRSIZ - strlen(p));[m
+[32m+[m[32m    return buf;[m
+[32m+[m[32m}[m
+ [m
+[31m-	if(fstat(fd, &st) < 0){[m
+[31m-		fprintf(2, "find: cannot stat %s\n", path);[m
+[31m-		exit(1);[m
+[31m-	}[m
+[32m+[m[32mvoid find(char *path, char* filename){[m
+[32m+[m[32m    char buf[512], *p;[m
+[32m+[m[32m    int fd;[m
+[32m+[m[32m    struct dirent de;[m
+[32m+[m[32m    struct stat st;[m
+ [m
+[31m-	switch(st.type){[m
+[31m-		case T_FILE:[m
+[31m-			fprintf(2, "Usage: find dir file\n");[m
+[31m-			exit(1);[m
+[31m-		case T_DIR:[m
+[31m-			if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf){[m
+[31m-				printf("find: path too long\n");[m
+[31m-				break;[m
+[31m-			}[m
+[31m-			strcpy(buf, path);[m
+[31m-			p = buf + strlen(buf);[m
+[31m-			*p++ = '/';[m
+[31m-			while(read(fd, &de, sizeof(de)) == sizeof(de)){[m
+[31m-				if (de.inum == 0 || strcmp(de.name, ".") == 0 || strcmp(de.name, "..") == 0)[m
+[32m+[m[32m    if((fd = open(path, 0)) < 0){[m
+[32m+[m[32m        fprintf(2, "find: cannot open %s\n", path);[m
+[32m+[m[32m        return ;[m
+[32m+[m[32m    }[m
+[32m+[m[32m    if(fstat(fd, &st) < 0){[m
+[32m+[m[32m        fprintf(2, "find: cannot stat %s\n",path);[m
+[32m+[m[32m        close(fd);[m
+[32m+[m[32m        return;[m
+[32m+[m[32m    }[m
+[32m+[m[32m    switch(st.type){[m
+[32m+[m[32m        case T_FILE:[m
+[32m+[m[32m            if(strcmp(fmtname(path), filename) == 0){[m
+[32m+[m[32m                printf("%s/%s\n", path, filename);[m
+[32m+[m[32m            }[m
+[32m+[m[32m            break;[m
+[32m+[m[32m        case T_DIR:[m
+[32m+[m[32m            if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf){[m
+[32m+[m[32m                printf("find: path too long\n");[m
+[32m+[m[32m                warning: in the working copy of 'user/usys.pl', LF will be replaced by CRLF the next time Git touches it
+break;[m
+[32m+[m[32m            }[m
+[32m+[m[32m            strcpy(buf, path);[m
+[32m+[m[32m            p = buf + strlen(buf);[m
+[32m+[m[32m            *p++ = '/';[m
+[32m+[m[32m            while(read(fd, &de, sizeof(de)) == sizeof(de)){[m
+[32m+[m[32m                if (de.inum == 0 || strcmp(de.name, ".") == 0 || strcmp(de.name, "..") == 0)[m
+ 					continue;[m
+[31m-				memmove(p, de.name, DIRSIZ);[m
+[31m-				p[DIRSIZ] = 0;[m
+[31m-				if(stat(buf, &st) < 0){[m
+[31m-        			printf("find: cannot stat %s\n", buf);[m
+[31m-        			continue;[m
+[31m-      			}[m
+[31m-      			if(st.type == T_DIR){[m
+[31m-      				find_helper(buf, target);[m
+[31m-      			}else if (st.type == T_FILE){[m
+[31m-      				if (strcmp(de.name, target) == 0)[m
+[31m-      				{[m
+[31m-      					printf("%s\n", buf);[m
+[31m-      				}[m
+[31m-      			}[m
+[31m-			}[m
+[31m-			break;[m
+[31m-	}[m
+[31m-	close(fd);[m
+[32m+[m[32m                memmove(p, de.name, DIRSIZ);[m
+[32m+[m[32m                p[DIRSIZ] = 0;[m
+[32m+[m[32m                if(stat(buf, &st) < 0){[m
+[32m+[m[32m                    printf("find: cannot stat %s\n", buf);[m
+[32m+[m[32m                    continue;[m
+[32m+[m[32m                }[m
+[32m+[m[32m                if(strcmp(de.name, filename) == 0){[m
+[32m+[m[32m                   printf("%s/%s\n", path, filename);[m[41m [m
+[32m+[m[32m                }[m
+[32m+[m[32m                if(st.type == T_DIR){[m
+[32m+[m[32m                    find(buf, filename);[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }[m
+[32m+[m[32m            break;[m
+[32m+[m[32m    }[m
+[32m+[m[32m    close(fd);[m
+ }[m
+[31m-int main(int argc, char const *argv[])[m
+[31m-{[m
+[31m-	if (argc != 3)[m
+[31m-	{[m
+[31m-		fprintf(2, "Usage: find dir file\n");[m
+[31m-		exit(1);[m
+[31m-	}[m
+ [m
+[31m-	char const *path = argv[1];[m
+[31m-	char const *target = argv[2];[m
+[31m-	find_helper(path, target);[m
+[31m-	exit(0);[m
+[31m-}[m
+[32m+[m[32mint main(int argc, char *argv[]){[m
+[32m+[m[32m    if(argc < 3){[m
+[32m+[m[32m        fprintf(2, "usage: find path filename...\n");[m
+[32m+[m[32m        exit(1);[m
+[32m+[m[32m    }[m
+[32m+[m[32m    find(argv[1], argv[2]);[m
+[32m+[m[32m    exit(0);[m
+[32m+[m[32m}[m
+\ No newline at end of file[m
+[1mdiff --git a/user/ls.c b/user/ls.c[m
+[1mindex b54d951..af36b1d 100644[m
+[1m--- a/user/ls.c[m
+[1m+++ b/user/ls.c[m
+[36m@@ -55,7 +55,7 @@[m [mls(char *path)[m
+     p = buf+strlen(buf);[m
+     *p++ = '/';[m
+     while(read(fd, &de, sizeof(de)) == sizeof(de)){[m
+[31m-      if(de.inum == 0)[m
+[32m+[m[32m      if(de.inum == 0 || strcmp(de.name, ".") == 0 || strcmp(de.name, ".."))[m
+         continue;[m
+       memmove(p, de.name, DIRSIZ);[m
+       p[DIRSIZ] = 0;[m
+[1mdiff --git a/user/usys.pl b/user/usys.pl[m
+[1mold mode 100755[m
+[1mnew mode 100644[m
