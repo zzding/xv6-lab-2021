@@ -134,8 +134,9 @@ syscall(void)
 {
   int num;
   struct proc *p = myproc();
-
+  //寄存器a7的值 偏移量168
   num = p->trapframe->a7;
+  //NELEM 数组的大小 (sizeof(x)/sizeof((x)[0])) 保持可扩展性
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
     p->trapframe->a0 = syscalls[num]();
   } else {

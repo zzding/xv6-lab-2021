@@ -43,7 +43,7 @@ procinit(void)
   }
   kvminithart();
 }
-
+//必须在禁用中断的情况下调用，以防止与进程竞争被移动到不同的 CPU。
 // Must be called with interrupts disabled,
 // to prevent race with process being moved
 // to a different CPU.
@@ -62,7 +62,7 @@ mycpu(void) {
   struct cpu *c = &cpus[id];
   return c;
 }
-
+//cpu struct 主要包括proc 和 上下文
 // Return the current struct proc *, or zero if none.
 struct proc*
 myproc(void) {
@@ -76,7 +76,7 @@ myproc(void) {
 int
 allocpid() {
   int pid;
-  
+  //分配pid 单纯加1
   acquire(&pid_lock);
   pid = nextpid;
   nextpid = nextpid + 1;
@@ -93,7 +93,7 @@ static struct proc*
 allocproc(void)
 {
   struct proc *p;
-
+  //只能同时运行64的进程？
   for(p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
     if(p->state == UNUSED) {
@@ -114,9 +114,11 @@ found:
   }
 
   // An empty user page table.
+  //分配一张页表？
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
     freeproc(p);
+    //释放完成后再解锁
     release(&p->lock);
     return 0;
   }
@@ -133,6 +135,7 @@ found:
 // free a proc structure and the data hanging from it,
 // including user pages.
 // p->lock must be held.
+//释放进程，进程变量均置为零  并没有真正删除？
 static void
 freeproc(struct proc *p)
 {
@@ -235,6 +238,7 @@ userinit(void)
 
 // Grow or shrink user memory by n bytes.
 // Return 0 on success, -1 on failure.
+//增加或者删减用户空间
 int
 growproc(int n)
 {
@@ -261,7 +265,12 @@ fork(void)
   int i, pid;
   struct proc *np;
   struct proc *p = myproc();
-
+  //1、分配子进程的空间
+  //2、拷贝虚拟内存？
+  //3、拷贝寄存器
+  //4、Cause fork to return 0 in the child.
+  //5、拷贝文件描述符
+  //6、增加文件描述符引用计数
   // Allocate process.
   if((np = allocproc()) == 0){
     return -1;
@@ -276,7 +285,7 @@ fork(void)
   np->sz = p->sz;
 
   np->parent = p;
-
+  //拷贝寄存器
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
@@ -284,11 +293,12 @@ fork(void)
   np->trapframe->a0 = 0;
 
   // increment reference counts on open file descriptors.
+  // 增加打开文件描述符的引用计数。
   for(i = 0; i < NOFILE; i++)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
-
+  //进程名字一样 说明进程名字可以重复
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
@@ -465,6 +475,7 @@ scheduler(void)
     intr_on();
     
     int found = 0;
+    //调度仅仅是时间片？
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
@@ -473,6 +484,7 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        //切换寄存器上下文  汇编
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
