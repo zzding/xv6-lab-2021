@@ -300,7 +300,7 @@ fork(void)
   np->cwd = idup(p->cwd);
   //进程名字一样 说明进程名字可以重复
   safestrcpy(np->name, p->name, sizeof(p->name));
-
+  np->mask = p->mask;
   pid = np->pid;
 
   np->state = RUNNABLE;
