@@ -705,3 +705,22 @@ procdump(void)
     printf("\n");
   }
 }
+
+
+uint8 ount_nproc(void){
+  struct proc *p;
+  int num = 0;
+
+  for(p = &proc[0]; p < &proc[NPROC]; ++p){
+    acquire(&p->lock);
+    if(p->state != UNUSED){
+      num++;
+    }
+    release(&p->lock);
+  }
+  return num;
+}
+
+
+
+

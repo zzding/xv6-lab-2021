@@ -22,14 +22,16 @@ struct {
   struct spinlock lock;
   struct run *freelist;
 } kmem;
-
+//end 是用户空间第一个内存
+//PHYSTOP 宏，用户空间最后一个地址
 void
 kinit()
 {
+  //每种锁都要初始化？
   initlock(&kmem.lock, "kmem");
   freerange(end, (void*)PHYSTOP);
 }
-
+//初始化时 按页进行free，并在kfree中用链表进行管理和记录
 void
 freerange(void *pa_start, void *pa_end)
 {
@@ -57,6 +59,7 @@ kfree(void *pa)
   r = (struct run*)pa;
 
   acquire(&kmem.lock);
+  //头插法  最新被释放在最前面
   r->next = kmem.freelist;
   kmem.freelist = r;
   release(&kmem.lock);
@@ -65,6 +68,7 @@ kfree(void *pa)
 // Allocate one 4096-byte page of physical memory.
 // Returns a pointer that the kernel can use.
 // Returns 0 if the memory cannot be allocated.
+//分配一页
 void *
 kalloc(void)
 {
@@ -79,4 +83,17 @@ kalloc(void)
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+int count_free_pages(void){
+  struct run* r;
+  int num = 0;
+  acquire(&kmem.lock);
+  r = kmem.freelist;
+  while(r){
+    num++;
+    r = r->next;
+  }
+  release(&kmem.lock);
+  return num;
 }
