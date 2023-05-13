@@ -707,7 +707,7 @@ procdump(void)
 }
 
 
-uint8 ount_nproc(void){
+uint8 count_nproc(void){
   struct proc *p;
   int num = 0;
 

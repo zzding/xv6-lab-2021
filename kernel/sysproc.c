@@ -109,7 +109,7 @@ sys_trace(void)
   return 0;
 }
 
-uint64 sys_sysinfo(struct sysinfo *info){
+uint64 sys_sysinfo(void){
   uint64 addr;
   struct sysinfo info;
   struct proc *p = myproc();
@@ -121,5 +121,6 @@ uint64 sys_sysinfo(struct sysinfo *info){
 
   if (copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0)
     return -1;
+  return 0;
 }
 

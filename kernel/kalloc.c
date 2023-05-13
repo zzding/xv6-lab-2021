@@ -85,9 +85,9 @@ kalloc(void)
   return (void*)r;
 }
 
-int count_free_pages(void){
+uint64 count_free_pages(void){
   struct run* r;
-  int num = 0;
+  uint64 num = 0;
   acquire(&kmem.lock);
   r = kmem.freelist;
   while(r){
@@ -95,5 +95,5 @@ int count_free_pages(void){
     r = r->next;
   }
   release(&kmem.lock);
-  return num;
+  return num * PGSIZE;
 }
