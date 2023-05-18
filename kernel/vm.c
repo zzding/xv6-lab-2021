@@ -440,3 +440,24 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+#define PTE_NUM 512
+void vmprintdfs(pagetable_t pagetable, int level){
+  if(level > 3)return;
+  for(int i = 0; i < PTE_NUM; ++i){
+    pte_t* pte = &(pagetable[i]);
+    if(!(*pte & PTE_V)) continue;
+    for(int j = 1; j <= level; ++j){
+      if(j < level) printf(".. ");
+      else if(j <= level) printf("..%d: ", i );
+    }
+    printf("pte %p ", *pte);
+    uint64 child = PTE2PA(*pte);
+    printf("pa %p\n", (pagetable_t)child);
+    vmprintdfs((pagetable_t)child, level + 1);
+  }
+}
+void vmprint(pagetable_t pagetable){
+  printf("page table %p\n", pagetable);
+  vmprintdfs(pagetable, 1);
+}
