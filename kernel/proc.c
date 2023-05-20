@@ -34,12 +34,6 @@ procinit(void)
       // Allocate a page for the process's kernel stack.
       // Map it high in memory, followed by an invalid
       // guard page.
-      char *pa = kalloc();
-      if(pa == 0)
-        panic("kalloc");
-      uint64 va = KSTACK((int) (p - proc));
-      kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
-      p->kstack = va;
   }
   kvminithart();
 }
@@ -120,12 +114,19 @@ found:
     release(&p->lock);
     return 0;
   }
-
+  p->kpagetable = user_kvmcreate();
+  char *pa = kalloc();
+  if(pa == 0)
+      panic("kalloc");
+  uint64 va = KSTACK(0);
+  user_kvmmap(p->kpagetable,va,PGSIZE,(uint64)pa,PTE_R | PTE_W);
+  p->kstack = KSTACK(0);
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
+  //printf("pagetable = %p,kpagetable = %p\n",p->pagetable,p->kpagetable);
 
   return p;
 }
@@ -136,12 +137,20 @@ found:
 static void
 freeproc(struct proc *p)
 {
+    //printf("freeproc\n");
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+    if(p->kstack){
+        kfree((void*)PTE2PA(*walk(p->kpagetable,KSTACK(0),0)));
+        p->kstack = 0;
+    }
+    if(p->kpagetable)
+        user_kvmfree(p->kpagetable);
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
+    p->kpagetable = 0;
   p->sz = 0;
   p->pid = 0;
   p->parent = 0;
@@ -473,8 +482,10 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        w_satp(MAKE_SATP(p->kpagetable));
+        sfence_vma();
         swtch(&c->context, &p->context);
-
+        kvminithart();
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
@@ -486,6 +497,7 @@ scheduler(void)
 #if !defined (LAB_FS)
     if(found == 0) {
       intr_on();
+      kvminithart();
       asm volatile("wfi");
     }
 #else
