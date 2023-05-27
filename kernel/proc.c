@@ -30,7 +30,6 @@ procinit(void)
   initlock(&pid_lock, "nextpid");
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
-
       // Allocate a page for the process's kernel stack.
       // Map it high in memory, followed by an invalid
       // guard page.
@@ -86,6 +85,7 @@ allocpid() {
 static struct proc*
 allocproc(void)
 {
+  //printf("allocproc\n");
   struct proc *p;
 
   for(p = proc; p < &proc[NPROC]; p++) {
@@ -134,31 +134,31 @@ found:
 // free a proc structure and the data hanging from it,
 // including user pages.
 // p->lock must be held.
-static void
+    static void
 freeproc(struct proc *p)
 {
     //printf("freeproc\n");
-  if(p->trapframe)
-    kfree((void*)p->trapframe);
-  p->trapframe = 0;
+    if(p->trapframe)
+        kfree((void*)p->trapframe);
+    p->trapframe = 0;
     if(p->kstack){
         kfree((void*)PTE2PA(*walk(p->kpagetable,KSTACK(0),0)));
         p->kstack = 0;
     }
     if(p->kpagetable)
         user_kvmfree(p->kpagetable);
-  if(p->pagetable)
-    proc_freepagetable(p->pagetable, p->sz);
-  p->pagetable = 0;
+    if(p->pagetable)
+        proc_freepagetable(p->pagetable, p->sz);
+    p->pagetable = 0;
     p->kpagetable = 0;
-  p->sz = 0;
-  p->pid = 0;
-  p->parent = 0;
-  p->name[0] = 0;
-  p->chan = 0;
-  p->killed = 0;
-  p->xstate = 0;
-  p->state = UNUSED;
+    p->sz = 0;
+    p->pid = 0;
+    p->parent = 0;
+    p->name[0] = 0;
+    p->chan = 0;
+    p->killed = 0;
+    p->xstate = 0;
+    p->state = UNUSED;
 }
 
 // Create a user page table for a given process,
@@ -228,6 +228,8 @@ userinit(void)
   // allocate one user page and copy init's instructions
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
+  kvmcopy(p->pagetable, p->kpagetable,0, sizeof(initcode));
+
   p->sz = PGSIZE;
 
   // prepare for the very first "return" from kernel to user.
@@ -247,18 +249,21 @@ userinit(void)
 int
 growproc(int n)
 {
-  uint sz;
+  uint sz,sz1;
   struct proc *p = myproc();
 
   sz = p->sz;
+  sz1 = sz;
   if(n > 0){
-    if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
+    if((sz = uvmalloc(p->pagetable, sz1, sz1 + n)) == 0) {
       return -1;
     }
+    kvmcopy(p->pagetable,p->kpagetable,sz1,sz1 + n);
   } else if(n < 0){
-    sz = uvmdealloc(p->pagetable, sz, sz + n);
+    sz = uvmdealloc(p->pagetable, sz1, sz1 + n);
+    kvmdealloc(p->kpagetable, sz1, sz1 + n);
   }
-  p->sz = sz;
+  p->sz = sz; 
   return 0;
 }
 
@@ -267,6 +272,7 @@ growproc(int n)
 int
 fork(void)
 {
+  //printf("fork\n");
   int i, pid;
   struct proc *np;
   struct proc *p = myproc();
@@ -282,16 +288,17 @@ fork(void)
     release(&np->lock);
     return -1;
   }
+  if(kvmcopy(np->pagetable, np->kpagetable,0, p->sz) < 0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
   np->sz = p->sz;
-
   np->parent = p;
-
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
-
   // Cause fork to return 0 in the child.
   np->trapframe->a0 = 0;
-
   // increment reference counts on open file descriptors.
   for(i = 0; i < NOFILE; i++)
     if(p->ofile[i])
@@ -341,6 +348,7 @@ reparent(struct proc *p)
 void
 exit(int status)
 {
+  //printf("exit\n");
   struct proc *p = myproc();
 
   if(p == initproc)
@@ -497,7 +505,7 @@ scheduler(void)
 #if !defined (LAB_FS)
     if(found == 0) {
       intr_on();
-      kvminithart();
+        kvminithart();
       asm volatile("wfi");
     }
 #else

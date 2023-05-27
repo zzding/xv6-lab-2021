@@ -275,7 +275,10 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 {
   char *mem;
   uint64 a;
-
+  if(newsz > PLIC){
+    printf("out of PLIC\n");
+    return 0;
+  }
   if(newsz < oldsz)
     return oldsz;
 
@@ -305,10 +308,21 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 {
   if(newsz >= oldsz)
     return oldsz;
-
   if(PGROUNDUP(newsz) < PGROUNDUP(oldsz)){
     int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
     uvmunmap(pagetable, PGROUNDUP(newsz), npages, 1);
+  }
+
+  return newsz;
+}
+uint64
+kvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
+{
+  if(newsz >= oldsz)
+    return oldsz;
+  if(PGROUNDUP(newsz) < PGROUNDUP(oldsz)){
+    int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
+    uvmunmap(pagetable, PGROUNDUP(newsz), npages, 0);
   }
 
   return newsz;
@@ -399,6 +413,31 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
 }
+int
+kvmcopy(pagetable_t old, pagetable_t new,uint64 oldsz, uint64 newsz)
+{
+  pte_t *pte;
+  uint64 pa, i;
+  uint flags;
+  oldsz = PGROUNDUP(oldsz);
+  for(i = oldsz; i < newsz; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0)
+      panic("kvmcopy: pte should exist");
+    if((*pte & PTE_V) == 0)
+      panic("kvmcopy: page not present");
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte) & ~PTE_U;
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      goto err;
+    }
+  }
+  return 0;
+
+ err:
+  printf("kvmcopy err\n");
+  uvmunmap(new, oldsz, i / PGSIZE, 1);
+  return -1;
+}
 
 // mark a PTE invalid for user access.
 // used by exec for the user stack guard page.
@@ -437,14 +476,34 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
   }
   return 0;
 }
+int
+kcopyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
+{
+  uint64 n, va0, pa0;
 
+  while(len > 0){
+    va0 = PGROUNDDOWN(dstva);
+    pa0 = PTE2PA(*walk(pagetable, va0, 0));
+    if(pa0 == 0)
+      return -1;
+    n = PGSIZE - (dstva - va0);
+    if(n > len)
+      n = len;
+    memmove((void *)(pa0 + (dstva - va0)), src, n);
+
+    len -= n;
+    src += n;
+    dstva = va0 + PGSIZE;
+  }
+  return 0;
+}
 // Copy from user to kernel.
 // Copy len bytes to dst from virtual address srcva in a given page table.
 // Return 0 on success, -1 on error.
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
-  uint64 n, va0, pa0;
+    /*uint64 n, va0, pa0;
 
   while(len > 0){
     va0 = PGROUNDDOWN(srcva);
@@ -460,7 +519,8 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
     dst += n;
     srcva = va0 + PGSIZE;
   }
-  return 0;
+  return 0;*/
+  return copyin_new(pagetable,dst,srcva,len);
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -470,7 +530,7 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 int
 copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
-  uint64 n, va0, pa0;
+  /*uint64 n, va0, pa0;
   int got_null = 0;
 
   while(got_null == 0 && max > 0){
@@ -503,26 +563,26 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return 0;
   } else {
     return -1;
+  }*/
+   return copyinstr_new(pagetable,dst,srcva,max);
   }
+// lab3 pgtbl : print vm
+static void vmprint_helper(pagetable_t pagetable,int level){
+    if(level > 3)
+        return;
+    for(int i = 0; i < 512; i++){
+        pte_t pte = pagetable[i];
+        if(pte & PTE_V){
+            uint64 child = PTE2PA(pte);
+            for(int j = 0; j < level; j++)
+                printf(" ..");
+            printf("%d: pte %p pa %p\n",i,pte,child);
+            vmprint_helper((pagetable_t)child,level+1);
 }
-
-#define PTE_NUM 512
-void vmprintdfs(pagetable_t pagetable, int level){
-  if(level > 3)return;
-  for(int i = 0; i < PTE_NUM; ++i){
-    pte_t* pte = &(pagetable[i]);
-    if(!(*pte & PTE_V)) continue;
-    for(int j = 1; j <= level; ++j){
-      if(j < level) printf(".. ");
-      else if(j <= level) printf("..%d: ", i );
-    }
-    printf("pte %p ", *pte);
-    uint64 child = PTE2PA(*pte);
-    printf("pa %p\n", (pagetable_t)child);
-    vmprintdfs((pagetable_t)child, level + 1);
   }
 }
 void vmprint(pagetable_t pagetable){
-  printf("page table %p\n", pagetable);
-  vmprintdfs(pagetable, 1);
+    printf("page table %p\n",pagetable);
+    vmprint_helper(pagetable,1);
+    return;
 }
