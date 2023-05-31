@@ -132,3 +132,17 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+
+
+void
+backtrace(){
+  //struct proc* p = myproc();
+  printf("backtrace\n");
+  uint64 fp = r_fp();
+  uint64 upper = PGROUNDUP(fp);
+  while(fp < upper){
+    printf("%p\n",*((pte_t*)(fp - 8)));
+    fp = *(pte_t*)(fp - 16);
+  }
+}
