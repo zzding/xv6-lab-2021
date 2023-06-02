@@ -67,6 +67,31 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if(r_scause() == 13 || r_scause() == 15){
+    uint64 vmaddress = r_stval();
+    if(vmaddress >= p->sz){
+      printf("[trap] virtual memory address higher than sbrk()\n");
+      p->killed = 1;
+    }else if(vmaddress < p->trapframe->sp){
+      printf("[trap] virtual memory address lowwer than sp\n");
+      p->killed = 1; 
+    }else {
+      vmaddress = PGROUNDDOWN(vmaddress);
+      char* mem = kalloc();
+      if(mem == 0){
+        //panic("(rscause is 13 or 15)kalloc fialed");
+        printf("[trap] kalloc fialed\n");
+        p->killed = 1;
+      }else{
+        memset(mem, 0, PGSIZE);
+        if(mappages(p->pagetable, vmaddress, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+          printf("[trap] mappages fialed\n"); 
+          kfree(mem);
+          p->killed = 1;
+        }
+      }
+    }
+    //Kill a process if it page-faults on a virtual memory address higher than any allocated with sbrk().
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
