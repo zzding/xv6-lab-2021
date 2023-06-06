@@ -171,6 +171,7 @@ uint64          walkaddr(pagetable_t, uint64);
 int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
+pte_t *         walk(pagetable_t , uint64 , int );
 
 // plic.c
 void            plicinit(void);
@@ -185,3 +186,7 @@ void            virtio_disk_intr(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
+#define KERNBASE 0x80000000L
+#define PHYSTOP (KERNBASE + 128*1024*1024)
+extern int page_ref_count[];
+extern struct spinlock page_ref_lock;
